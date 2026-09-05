@@ -1,317 +1,61 @@
-// ===== INTERSECTION OBSERVER UNTUK REVEAL ANIMATION =====
-const observerOptions = {
-  threshold: 0.1,
-  rootMargin: '0px 0px -100px 0px'
-};
-
+const sections = document.querySelectorAll('.reveal');
 const observer = new IntersectionObserver((entries) => {
-  entries.forEach((entry) => {
-    if (entry.isIntersecting) {
-      entry.target.classList.add('reveal');
-      observer.unobserve(entry.target);
-    }
-  });
-}, observerOptions);
+  entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add('show'); observer.unobserve(entry.target); } });
+}, { threshold: 0.14 });
+sections.forEach((section) => observer.observe(section));
 
-// Observe semua elemen dengan class reveal
-document.querySelectorAll('.reveal').forEach((el) => {
-  observer.observe(el);
-});
-
-// ===== SMOOTH SCROLL & ACTIVE NAV =====
-const navLinks = document.querySelectorAll('nav a');
-const sections = document.querySelectorAll('section[id]');
-
+const navLinks = [...document.querySelectorAll('nav a')];
+const anchors = navLinks.map(link => document.querySelector(link.getAttribute('href'))).filter(Boolean);
 const navObserver = new IntersectionObserver((entries) => {
-  entries.forEach((entry) => {
-    if (entry.isIntersecting) {
-      navLinks.forEach((link) => {
-        link.classList.remove('active');
-        if (link.getAttribute('href') === `#${entry.target.id}`) {
-          link.classList.add('active');
-        }
-      });
-    }
+  entries.forEach(entry => { if (entry.isIntersecting) navLinks.forEach(link => link.classList.toggle('active', link.getAttribute('href') === `#${entry.target.id}`)); });
+}, { rootMargin: '-35% 0px -55% 0px' });
+anchors.forEach(section => navObserver.observe(section));
+
+const contact = document.querySelector('#contact');
+if (contact && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  new IntersectionObserver((entries) => {
+    entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('contact-active'); });
+  }, { threshold: .3 }).observe(contact);
+}
+
+['#services', '#about'].forEach((selector) => {
+  const section = document.querySelector(selector);
+  if (section && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) new IntersectionObserver((entries) => entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('section-active'); }), { threshold: .22 }).observe(section);
+});
+
+const scene = document.querySelector('#growth-scene');
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (scene && !reduceMotion) {
+  let frame;
+  const visual = scene.closest('.hero-visual');
+  visual.addEventListener('pointermove', (event) => {
+    const bounds = visual.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - .5;
+    const y = (event.clientY - bounds.top) / bounds.height - .5;
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => scene.style.setProperty('--tilt', `${x * 13}deg ${-y * 10}deg`));
   });
-}, {
-  threshold: 0.3
-});
+  visual.addEventListener('pointerleave', () => scene.style.setProperty('--tilt', '0deg 0deg'));
+}
 
-sections.forEach((section) => {
-  navObserver.observe(section);
-});
-
-// ===== SMOOTH SCROLL UNTUK LINK =====
-document.querySelectorAll('a[href^="#"]').forEach((link) => {
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    const target = document.querySelector(link.getAttribute('href'));
-    if (target) {
-      target.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }
-  });
-});
-
-// ===== PARALLAX EFFECT =====
-let ticking = false;
-
-window.addEventListener('scroll', () => {
-  if (!ticking) {
-    window.requestAnimationFrame(() => {
-      const scrollY = window.scrollY;
-      
-      // Parallax untuk orbs
-      const orbOne = document.querySelector('.orb-one');
-      const orbTwo = document.querySelector('.orb-two');
-      
-      if (orbOne) {
-        orbOne.style.transform = `translateY(${scrollY * 0.5}px)`;
-      }
-      if (orbTwo) {
-        orbTwo.style.transform = `translateY(${scrollY * 0.3}px)`;
-      }
-      
-      ticking = false;
-    });
-    ticking = true;
+const canvas = document.querySelector('#fdc-webgl');
+if (canvas && !reduceMotion) {
+  const gl = canvas.getContext('webgl', { alpha: true, antialias: true });
+  if (gl) {
+    const vertex = `attribute vec3 p; uniform mat4 m; void main(){gl_Position=m*vec4(p,1.);}`;
+    const fragment = `precision mediump float; uniform vec4 c; void main(){gl_FragColor=c;}`;
+    const shader = (type, source) => { const s = gl.createShader(type); gl.shaderSource(s, source); gl.compileShader(s); return s; };
+    const program = gl.createProgram(); gl.attachShader(program, shader(gl.VERTEX_SHADER, vertex)); gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragment)); gl.linkProgram(program); gl.useProgram(program);
+    const points = [-1,-1,-1,1,-1,-1,1,1,-1,-1,1,-1,-1,-1,1,1,-1,1,1,1,1,-1,1,1];
+    const indices = [0,1,2,0,2,3,4,6,5,4,7,6,0,4,5,0,5,1,3,2,6,3,6,7,1,5,6,1,6,2,0,3,7,0,7,4];
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(points), gl.STATIC_DRAW);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+    const pos = gl.getAttribLocation(program, 'p'); gl.enableVertexAttribArray(pos); gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, 0, 0);
+    const mat = gl.getUniformLocation(program, 'm'), color = gl.getUniformLocation(program, 'c');
+    let px = 0, py = 0;
+    const resize = () => { const d = Math.min(devicePixelRatio, 2), s = canvas.clientWidth * d; canvas.width = s; canvas.height = s; gl.viewport(0,0,s,s); };
+    new ResizeObserver(resize).observe(canvas); resize();
+    const draw = (time) => { const a = time * .00034 + px, b = time * .00021 + py, ca=Math.cos(a)*.7, sa=Math.sin(a)*.7, cb=Math.cos(b)*.7, sb=Math.sin(b)*.7; const m = new Float32Array([ca,sa*sb,sa*cb,0,0,cb,-sb,0,-sa,ca*sb,ca*cb,.28,0,0,0,1]); gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.uniformMatrix4fv(mat,false,m);gl.uniform4f(color,.43,.19,1,.28);gl.drawElements(gl.TRIANGLES,indices.length,gl.UNSIGNED_SHORT,0); requestAnimationFrame(draw); }; requestAnimationFrame(draw);
+    scene.closest('.hero-visual').addEventListener('pointermove', e => { const r = e.currentTarget.getBoundingClientRect(); px = (e.clientX-r.left)/r.width-.5; py = (e.clientY-r.top)/r.height-.5; });
   }
-});
-
-// ===== HERO VISUAL - CANVAS 3D (OPTIONAL) =====
-const canvas = document.getElementById('fdc-webgl');
-
-if (canvas && canvas.getContext) {
-  const ctx = canvas.getContext('2d');
-  
-  const resizeCanvas = () => {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-  };
-  
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
-  
-  let animationId;
-  const particles = [];
-  
-  class Particle {
-    constructor() {
-      this.x = Math.random() * canvas.width;
-      this.y = Math.random() * canvas.height;
-      this.vx = (Math.random() - 0.5) * 2;
-      this.vy = (Math.random() - 0.5) * 2;
-      this.radius = Math.random() * 2 + 1;
-      this.opacity = Math.random() * 0.5 + 0.2;
-    }
-    
-    update() {
-      this.x += this.vx;
-      this.y += this.vy;
-      
-      if (this.x < 0) this.x = canvas.width;
-      if (this.x > canvas.width) this.x = 0;
-      if (this.y < 0) this.y = canvas.height;
-      if (this.y > canvas.height) this.y = 0;
-    }
-    
-    draw() {
-      ctx.fillStyle = `rgba(0, 217, 255, ${this.opacity})`;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  
-  // Buat particles
-  for (let i = 0; i < 50; i++) {
-    particles.push(new Particle());
-  }
-  
-  const animate = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    particles.forEach((particle) => {
-      particle.update();
-      particle.draw();
-      
-      // Draw connections
-      particles.forEach((otherParticle) => {
-        const dx = particle.x - otherParticle.x;
-        const dy = particle.y - otherParticle.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance < 100) {
-          ctx.strokeStyle = `rgba(0, 217, 255, ${0.1 * (1 - distance / 100)})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(particle.x, particle.y);
-          ctx.lineTo(otherParticle.x, otherParticle.y);
-          ctx.stroke();
-        }
-      });
-    });
-    
-    animationId = requestAnimationFrame(animate);
-  };
-  
-  animate();
 }
-
-// ===== WHATSAPP BUTTON TRACKING =====
-const whatsappButton = document.querySelector('.whatsapp-button');
-if (whatsappButton) {
-  whatsappButton.addEventListener('click', (e) => {
-    // Optional: track atau log click
-    console.log('WhatsApp button clicked');
-  });
-}
-
-// ===== SCROLL TO TOP BUTTON FUNCTIONALITY =====
-const scrollToTopLink = document.querySelector('footer a[href="#home"]');
-if (scrollToTopLink) {
-  scrollToTopLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    });
-  });
-}
-
-// ===== ANIMATE NUMBERS =====
-function animateValue(element, start, end, duration) {
-  let startTimestamp = null;
-  
-  const step = (timestamp) => {
-    if (!startTimestamp) startTimestamp = timestamp;
-    const progress = (timestamp - startTimestamp) / duration;
-    
-    if (progress < 1) {
-      element.textContent = Math.floor(start + (end - start) * progress);
-      requestAnimationFrame(step);
-    } else {
-      element.textContent = end;
-    }
-  };
-  
-  requestAnimationFrame(step);
-}
-
-// ===== HOVER EFFECTS =====
-const serviceCards = document.querySelectorAll('.service-card');
-serviceCards.forEach((card) => {
-  card.addEventListener('mouseenter', () => {
-    card.style.transform = 'translateY(-10px)';
-  });
-  
-  card.addEventListener('mouseleave', () => {
-    card.style.transform = 'translateY(0)';
-  });
-});
-
-// ===== LIGHT EFFECT FOLLOW MOUSE =====
-const serviceGrid = document.querySelector('.service-grid');
-if (serviceGrid) {
-  serviceGrid.addEventListener('mousemove', (e) => {
-    const cards = document.querySelectorAll('.service-card');
-    cards.forEach((card) => {
-      const rect = card.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      const glow = card.querySelector('.card-glow');
-      if (glow) {
-        glow.style.left = `${x - 100}px`;
-        glow.style.top = `${y - 100}px`;
-      }
-    });
-  });
-}
-
-// ===== KEYBOARD NAVIGATION =====
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    // Bisa tambah fitur lainnya
-  }
-});
-
-// ===== LOAD EVENT =====
-window.addEventListener('load', () => {
-  // Semua elemen sudah loaded
-  console.log('FDC Entrepreneur website loaded');
-});
-
-// ===== CUSTOM CURSOR EFFECT (OPTIONAL) =====
-const customCursorEnabled = true;
-
-if (customCursorEnabled) {
-  const cursor = document.createElement('div');
-  cursor.className = 'custom-cursor';
-  document.body.appendChild(cursor);
-  
-  document.addEventListener('mousemove', (e) => {
-    cursor.style.left = `${e.clientX}px`;
-    cursor.style.top = `${e.clientY}px`;
-  });
-  
-  // Style cursor via inline atau CSS
-  Object.assign(cursor.style, {
-    position: 'fixed',
-    width: '30px',
-    height: '30px',
-    border: '2px solid rgba(0, 217, 255, 0.5)',
-    borderRadius: '50%',
-    pointerEvents: 'none',
-    transform: 'translate(-50%, -50%)',
-    zIndex: '10000',
-    display: 'none'
-  });
-  
-  // Show cursor on page
-  document.addEventListener('mouseenter', () => {
-    cursor.style.display = 'block';
-  });
-  
-  document.addEventListener('mouseleave', () => {
-    cursor.style.display = 'none';
-  });
-}
-
-// ===== FORM VALIDATION (JIKA ADA) =====
-const form = document.querySelector('form');
-if (form) {
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    // Tambah validasi sesuai kebutuhan
-    console.log('Form submitted');
-  });
-}
-
-// ===== ACCESSIBILITY - SKIP TO MAIN =====
-const skipLink = document.createElement('a');
-skipLink.href = '#home';
-skipLink.textContent = 'Skip to main content';
-skipLink.style.cssText = `
-  position: absolute;
-  top: -40px;
-  left: 0;
-  background: #00d9ff;
-  color: #080512;
-  padding: 8px;
-  z-index: 100;
-`;
-
-skipLink.addEventListener('focus', () => {
-  skipLink.style.top = '0';
-});
-
-skipLink.addEventListener('blur', () => {
-  skipLink.style.top = '-40px';
-});
-
-document.body.insertBefore(skipLink, document.body.firstChild);
-
-console.log('FDC Entrepreneur - Script loaded successfully');
